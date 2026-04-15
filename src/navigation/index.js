@@ -6,12 +6,8 @@ import { useAuth } from '../context/AuthContext';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
 import CustomerTabs from './CustomerTabs';
-import BusinessDashboard from '../screens/business/BusinessDashboard';
+import BusinessTabs from './BusinessTabs';
 import CreateBusinessProfile from '../screens/business/CreateBusinessProfile';
-import CreateCoupon from '../screens/business/CreateCoupon';
-import BusinessQR from '../screens/business/BusinessQR';
-import EditBusinessProfile from '../screens/business/EditBusinessProfile';
-import RedeemCoupon from '../screens/business/RedeemCoupon';
 
 const Stack = createNativeStackNavigator();
 
@@ -24,17 +20,6 @@ function AuthStack() {
   );
 }
 
-function BusinessStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="BusinessDashboard" component={BusinessDashboard} />
-      <Stack.Screen name="CreateCoupon" component={CreateCoupon} />
-      <Stack.Screen name="BusinessQR" component={BusinessQR} />
-      <Stack.Screen name="EditBusinessProfile" component={EditBusinessProfile} />
-      <Stack.Screen name="RedeemCoupon" component={RedeemCoupon} />
-    </Stack.Navigator>
-  );
-}
 
 function CreateBusinessProfileStack() {
   return (
@@ -61,7 +46,7 @@ export default function Navigation() {
     <NavigationContainer>
       {!user                                          && <AuthStack />}
       {user && role === 'customer'                    && <CustomerTabs />}
-      {isBusinessOwner && hasBusinessProfile === true  && <BusinessStack />}
+      {isBusinessOwner && hasBusinessProfile === true  && <BusinessTabs />}
       {isBusinessOwner && hasBusinessProfile === false && <CreateBusinessProfileStack />}
     </NavigationContainer>
   );

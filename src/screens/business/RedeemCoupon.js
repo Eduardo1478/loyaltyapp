@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 
-export default function RedeemCoupon({ navigation }) {
+export default function RedeemCoupon() {
   const [code, setCode]         = useState('');
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
@@ -45,7 +45,7 @@ export default function RedeemCoupon({ navigation }) {
       // Fetch customer name and coupon title in parallel
       const [userSnap, couponSnap] = await Promise.all([
         getDoc(doc(db, 'users', redemption.userId)),
-        getDoc(doc(db, 'coupons', redemption.couponId)),
+        getDoc(doc(db, 'promos', redemption.couponId)),
       ]);
 
       // Mark as redeemed
@@ -72,13 +72,9 @@ export default function RedeemCoupon({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.navBar}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>← Atrás</Text>
-        </TouchableOpacity>
-        <Text style={styles.navTitle}>Canjear cupón</Text>
-        <View style={styles.navSpacer} />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Canjear</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -143,18 +139,13 @@ export default function RedeemCoupon({ navigation }) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#fff' },
   flex: { flex: 1 },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  header: {
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  backText: { fontSize: 15, color: '#FF6B35', fontWeight: '500', width: 72 },
-  navTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
-  navSpacer: { width: 72 },
+  headerTitle: { fontSize: 22, fontWeight: '800', color: '#1A1A1A' },
 
   container: {
     flex: 1,

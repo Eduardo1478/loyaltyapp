@@ -3,20 +3,8 @@
     "allow": [
       "Bash(npx expo:*)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\(sorted\\(d['dependencies'].keys\\(\\)\\)\\)\\)\")",
-      "Bash(git remote:*)",
-      "Bash(git add:*)",
-      "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(git branch:*)",
-      "Bash(git reset:*)",
-      "Bash(git -C /Users/eduardop/Desktop/loyaltyapp log --oneline)",
-      "Bash(git checkout:*)",
-      "Bash(rm /Users/eduardop/Desktop/.git/index.lock)",
-      "Bash(git -C /Users/eduardop/Desktop add -A)",
-      "Bash(git -C /Users/eduardop/Desktop commit -m \"Initial commit\")",
-      "Bash(git -C /Users/eduardop/Desktop push --force origin clean-main:main)",
-      "Bash(git -C /Users/eduardop/Desktop checkout main)",
-      "Bash(git init:*)"
+      "Bash(npm install:*)",
+      "Bash(npm config:*)"
     ]
   }
 }
