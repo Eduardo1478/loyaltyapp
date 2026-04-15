@@ -14,10 +14,12 @@ import {
   getDocs,
   addDoc,
   deleteDoc,
+  updateDoc,
   collection,
   query,
   where,
   serverTimestamp,
+  increment,
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
@@ -37,7 +39,7 @@ function formatExpiry(isoString) {
 }
 
 export default function BusinessPage({ route, navigation }) {
-  const { businessId } = route.params;
+  const { businessId, autoFollow } = route.params;
   const { user } = useAuth();
 
   const [business, setBusiness]       = useState(null);
@@ -101,21 +103,37 @@ export default function BusinessPage({ route, navigation }) {
     fetchPage();
   }, [fetchPage]);
 
+  // Auto-follow when arriving from QR scan
+  useEffect(() => {
+    if (!autoFollow || loading || isFollowing) return;
+    handleFollowToggle();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
+
   async function handleFollowToggle() {
     setFollowLoading(true);
+    const businessRef = doc(db, 'businesses', businessId);
     try {
       if (isFollowing) {
-        await deleteDoc(doc(db, 'follows', followDocId));
+        await Promise.all([
+          deleteDoc(doc(db, 'follows', followDocId)),
+          updateDoc(businessRef, { followerCount: increment(-1) }),
+        ]);
         setIsFollowing(false);
         setFollowDocId(null);
+        setBusiness((prev) => ({ ...prev, followerCount: (prev.followerCount ?? 1) - 1 }));
       } else {
-        const newDoc = await addDoc(collection(db, 'follows'), {
-          userId:     user.uid,
-          businessId,
-          followedAt: serverTimestamp(),
-        });
+        const newDoc = await Promise.all([
+          addDoc(collection(db, 'follows'), {
+            userId:     user.uid,
+            businessId,
+            followedAt: serverTimestamp(),
+          }),
+          updateDoc(businessRef, { followerCount: increment(1) }),
+        ]);
         setIsFollowing(true);
-        setFollowDocId(newDoc.id);
+        setFollowDocId(newDoc[0].id);
+        setBusiness((prev) => ({ ...prev, followerCount: (prev.followerCount ?? 0) + 1 }));
       }
     } catch (e) {
       // Non-fatal: surface nothing, state stays as-is

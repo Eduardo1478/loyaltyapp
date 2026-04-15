@@ -19,7 +19,7 @@ export default function QRScanner({ navigation }) {
 
     // The QR encodes a raw businessId string
     // Navigate to BusinessPage — it handles invalid IDs gracefully
-    navigation.navigate('BusinessPage', { businessId: data });
+    navigation.navigate('BusinessPage', { businessId: data, autoFollow: true });
   }
 
   // ── Permission states ─────────────────────────────────────────────────────

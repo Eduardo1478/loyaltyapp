@@ -4,12 +4,15 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
+  Alert,
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import {
+  collection, query, where, getDocs, doc, getDoc, deleteDoc, updateDoc, increment,
+} from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
 
@@ -53,21 +56,54 @@ export default function FeedScreen({ navigation }) {
     }, [fetchFollowedBusinesses])
   );
 
+  async function handleUnfollow(item) {
+    try {
+      const followsSnap = await getDocs(
+        query(
+          collection(db, 'follows'),
+          where('userId', '==', user.uid),
+          where('businessId', '==', item.id)
+        )
+      );
+      if (followsSnap.empty) return;
+      await Promise.all([
+        deleteDoc(doc(db, 'follows', followsSnap.docs[0].id)),
+        updateDoc(doc(db, 'businesses', item.id), { followerCount: increment(-1) }),
+      ]);
+      setBusinesses((prev) => prev.filter((b) => b.id !== item.id));
+    } catch (e) {
+      // Non-fatal
+    }
+  }
+
+  function confirmUnfollow(item) {
+    Alert.alert(
+      item.name,
+      '¿Dejar de seguir este negocio?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Dejar de seguir', style: 'destructive', onPress: () => handleUnfollow(item) },
+      ]
+    );
+  }
+
   function renderBusiness({ item }) {
     return (
-      <View style={styles.card}>
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate('BusinessPage', { businessId: item.id })}
+        onLongPress={() => confirmUnfollow(item)}
+        delayLongPress={400}
+      >
         <View style={styles.cardInfo}>
           <Text style={styles.businessName}>{item.name}</Text>
           <Text style={styles.businessCategory}>{item.category}</Text>
         </View>
-        <TouchableOpacity
-          style={styles.dealsButton}
-          activeOpacity={0.8}
-          onPress={() => navigation.navigate('BusinessPage', { businessId: item.id })}
-        >
+        <View style={styles.dealsButton}>
           <Text style={styles.dealsButtonText}>Ver ofertas</Text>
-        </TouchableOpacity>
-      </View>
+        </View>
+      </TouchableOpacity>
     );
   }
 
