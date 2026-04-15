@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, getDocs, collection, query, where } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import { registerPushToken } from '../config/notifications';
 
 const AuthContext = createContext(null);
 
@@ -35,6 +36,8 @@ export function AuthProvider({ children }) {
           setHasBusinessProfile(null);
         }
         setUser(u);
+        // Register push token on every login — no-op if already up to date or on simulator
+        registerPushToken(u.uid);
       } else {
         setUser(null);
         setRole(null);

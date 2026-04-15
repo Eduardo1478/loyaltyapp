@@ -149,10 +149,26 @@ export default function BusinessDashboard({ navigation }) {
           >
             <Text style={styles.secondaryButtonText}>Mi QR</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryButton} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('EditBusinessProfile', {
+              businessId:  business.id,
+              name:        business.name,
+              category:    business.category,
+              description: business.description ?? '',
+            })}
+          >
             <Text style={styles.secondaryButtonText}>Mi perfil</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity
+          style={styles.redeemButton}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('RedeemCoupon')}
+        >
+          <Text style={styles.redeemButtonText}>Canjear código de cliente</Text>
+        </TouchableOpacity>
 
         <Text style={styles.sectionTitle}>Mis cupones</Text>
       </>
@@ -316,6 +332,20 @@ const styles = StyleSheet.create({
     color: '#555',
     fontSize: 15,
     fontWeight: '500',
+  },
+  redeemButton: {
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FF6B35',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  redeemButtonText: {
+    color: '#FF6B35',
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   // Section

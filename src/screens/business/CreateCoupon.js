@@ -15,6 +15,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { collection, addDoc, getDocs, query, where, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
+import { notifyFollowers } from '../../config/notifications';
 
 // Minimum expiry date is tomorrow
 function tomorrow() {
@@ -72,6 +73,15 @@ export default function CreateCoupon({ navigation }) {
         expiresAt:  noExpiry ? null : Timestamp.fromDate(expiryDate),
         createdAt:  serverTimestamp(),
         active:     true,
+      });
+
+      // Fire-and-forget — notifications are non-critical, don't block navigation
+      const bizDoc = bizSnap.docs[0];
+      notifyFollowers({
+        businessId,
+        businessName:  bizDoc.data().name,
+        couponTitle:   title.trim(),
+        discount:      discount.trim(),
       });
 
       navigation.goBack();

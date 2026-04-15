@@ -9,44 +9,37 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { signOut } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '../../config/firebase';
+import { db } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
 
-export default function CustomerHome({ navigation }) {
+export default function FeedScreen({ navigation }) {
   const { user } = useAuth();
   const [businesses, setBusinesses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState('');
 
   const fetchFollowedBusinesses = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      // 1. Get all follow documents for this user
-      const followsQuery = query(
-        collection(db, 'follows'),
-        where('userId', '==', user.uid)
+      const followsSnap = await getDocs(
+        query(collection(db, 'follows'), where('userId', '==', user.uid))
       );
-      const followsSnap = await getDocs(followsQuery);
 
       if (followsSnap.empty) {
         setBusinesses([]);
         return;
       }
 
-      // 2. Fetch each business document in parallel
       const businessIds = followsSnap.docs.map((d) => d.data().businessId);
       const businessDocs = await Promise.all(
         businessIds.map((id) => getDoc(doc(db, 'businesses', id)))
       );
 
-      const result = businessDocs
-        .filter((d) => d.exists())
-        .map((d) => ({ id: d.id, ...d.data() }));
-
-      setBusinesses(result);
+      setBusinesses(
+        businessDocs.filter((d) => d.exists()).map((d) => ({ id: d.id, ...d.data() }))
+      );
     } catch (e) {
       setError('No se pudieron cargar tus negocios. Intenta de nuevo.');
     } finally {
@@ -59,15 +52,6 @@ export default function CustomerHome({ navigation }) {
       fetchFollowedBusinesses();
     }, [fetchFollowedBusinesses])
   );
-
-  async function handleLogout() {
-    try {
-      await signOut(auth);
-      // AuthContext clears the user, Navigation unmounts this stack automatically
-    } catch (e) {
-      setError('No se pudo cerrar sesión. Intenta de nuevo.');
-    }
-  }
 
   function renderBusiness({ item }) {
     return (
@@ -92,32 +76,18 @@ export default function CustomerHome({ navigation }) {
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyText}>Aún no sigues ningún negocio.</Text>
         <Text style={styles.emptyHint}>
-          Escanea un código QR para seguir tu primer negocio.
+          Usa el botón central ⊙ para escanear un código QR y seguir tu primer negocio.
         </Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      {/* Header */}
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Text style={styles.appName}>LoyaltyApp</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.scanButton}
-            onPress={() => navigation.navigate('QRScanner')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.scanButtonText}>Escanear QR</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleLogout} activeOpacity={0.7}>
-            <Text style={styles.logoutText}>Salir</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
-      {/* Body */}
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#FF6B35" />
@@ -134,18 +104,7 @@ export default function CustomerHome({ navigation }) {
           data={businesses}
           keyExtractor={(item) => item.id}
           renderItem={renderBusiness}
-          ListHeaderComponent={
-            <View>
-              <TouchableOpacity
-                style={styles.discoverButton}
-                onPress={() => navigation.navigate('DiscoverScreen')}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.discoverButtonText}>Descubrir negocios</Text>
-              </TouchableOpacity>
-              <Text style={styles.sectionTitle}>Mis negocios</Text>
-            </View>
-          }
+          ListHeaderComponent={<Text style={styles.sectionTitle}>Mis negocios</Text>}
           ListEmptyComponent={renderEmpty}
           contentContainerStyle={styles.listContent}
         />
@@ -155,58 +114,17 @@ export default function CustomerHome({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
+  safeArea: { flex: 1, backgroundColor: '#fff' },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
   appName: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 22,
+    fontWeight: '800',
     color: '#FF6B35',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  scanButton: {
-    backgroundColor: '#FF6B35',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  scanButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  logoutText: {
-    fontSize: 14,
-    color: '#888',
-  },
-  discoverButton: {
-    marginTop: 16,
-    marginBottom: 4,
-    height: 44,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FF6B35',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  discoverButtonText: {
-    color: '#FF6B35',
-    fontSize: 14,
-    fontWeight: '600',
   },
   centered: {
     flex: 1,
@@ -226,11 +144,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#FF6B35',
   },
-  retryText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  retryText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   listContent: {
     paddingHorizontal: 20,
     paddingBottom: 32,
@@ -254,31 +168,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     backgroundColor: '#FAFAFA',
   },
-  cardInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
+  cardInfo: { flex: 1, marginRight: 12 },
   businessName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1A1A1A',
     marginBottom: 4,
   },
-  businessCategory: {
-    fontSize: 13,
-    color: '#888',
-  },
+  businessCategory: { fontSize: 13, color: '#888' },
   dealsButton: {
     backgroundColor: '#FF6B35',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 8,
   },
-  dealsButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
+  dealsButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',

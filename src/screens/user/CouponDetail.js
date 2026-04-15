@@ -1,12 +1,25 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+  collection,
+  query,
+  where,
+  getDocs,
+} from 'firebase/firestore';
+import { db } from '../../config/firebase';
+import { useAuth } from '../../context/AuthContext';
 
 const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
@@ -25,14 +38,55 @@ function formatExpiry(isoString) {
 
 export default function CouponDetail({ route, navigation }) {
   const { coupon } = route.params;
+  const { user } = useAuth();
 
-  // Code is stable for the lifetime of this screen instance
-  const code = useMemo(() => generateCode(), []);
-
+  const [code, setCode]         = useState(null);   // loaded from or written to Firestore
+  const [codeLoading, setCodeLoading] = useState(true);
   const [redeemed, setRedeemed] = useState(false);
 
+  // On mount: look for an existing unused redemption for this user+coupon.
+  // If found, reuse its code. If not, generate a new one and create the doc.
+  const initCode = useCallback(async () => {
+    try {
+      const existing = await getDocs(
+        query(
+          collection(db, 'redemptions'),
+          where('userId',   '==', user.uid),
+          where('couponId', '==', coupon.id),
+          where('redeemedAt', '==', null)
+        )
+      );
+
+      if (!existing.empty) {
+        // Reuse the existing code (document ID is the code)
+        setCode(existing.docs[0].id);
+        return;
+      }
+
+      // Generate a new unique code and write to redemptions/{code}
+      const newCode = generateCode();
+      await setDoc(doc(db, 'redemptions', newCode), {
+        couponId:   coupon.id,
+        userId:     user.uid,
+        businessId: coupon.businessId ?? '',
+        createdAt:  serverTimestamp(),
+        redeemedAt: null,
+      });
+      setCode(newCode);
+    } catch (e) {
+      // Fallback: generate a local code so the screen doesn't break
+      setCode(generateCode());
+    } finally {
+      setCodeLoading(false);
+    }
+  }, [coupon.id, coupon.businessId, user.uid]);
+
+  useEffect(() => {
+    initCode();
+  }, [initCode]);
+
   function handleRedeem() {
-    // Placeholder — real redemption logic (Firestore write, one-time use) will go here
+    // UI-only flag — the actual redemption is confirmed from the business owner's RedeemCoupon screen
     setRedeemed(true);
   }
 
@@ -59,25 +113,30 @@ export default function CouponDetail({ route, navigation }) {
           <Text style={styles.codeLabel}>Código de canje</Text>
           <Text style={styles.codeLabel2}>Muestra este código al cajero</Text>
           <View style={styles.codeBox}>
-            <Text style={styles.codeText}>{code}</Text>
+            {codeLoading ? (
+              <ActivityIndicator color="#fff" size="large" />
+            ) : (
+              <Text style={styles.codeText}>{code}</Text>
+            )}
           </View>
         </View>
 
         {/* Redeem button / success state */}
         {redeemed ? (
           <View style={styles.successBox}>
-            <Text style={styles.successTitle}>¡Cupón canjeado!</Text>
+            <Text style={styles.successTitle}>¡Cupón presentado!</Text>
             <Text style={styles.successSubtitle}>
-              Presenta este código al cajero para obtener tu descuento.
+              El cajero validará el código y aplicará el descuento.
             </Text>
           </View>
         ) : (
           <TouchableOpacity
-            style={styles.redeemButton}
+            style={[styles.redeemButton, codeLoading && styles.redeemButtonDisabled]}
             onPress={handleRedeem}
+            disabled={codeLoading}
             activeOpacity={0.8}
           >
-            <Text style={styles.redeemButtonText}>Canjear cupón</Text>
+            <Text style={styles.redeemButtonText}>Presentar al cajero</Text>
           </TouchableOpacity>
         )}
 
@@ -100,27 +159,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  backText: {
-    fontSize: 15,
-    color: '#FF6B35',
-    fontWeight: '500',
-    width: 72,
-  },
-  navTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1A1A1A',
-  },
+  backText: { fontSize: 15, color: '#FF6B35', fontWeight: '500', width: 72 },
+  navTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
   navSpacer: { width: 72 },
-
   container: {
     paddingHorizontal: 24,
     paddingTop: 28,
     paddingBottom: 48,
     alignItems: 'center',
   },
-
-  // Info card
   infoCard: {
     width: '100%',
     borderWidth: 1,
@@ -132,45 +179,20 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   couponTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1A1A1A',
-    textAlign: 'center',
-    marginBottom: 8,
+    fontSize: 18, fontWeight: '600', color: '#1A1A1A', textAlign: 'center', marginBottom: 8,
   },
-  couponDiscount: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#FF6B35',
-    marginBottom: 10,
-  },
-  couponExpiry: {
-    fontSize: 13,
-    color: '#999',
-  },
-
-  // Code block
-  codeSection: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  codeLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#555',
-    marginBottom: 4,
-  },
-  codeLabel2: {
-    fontSize: 13,
-    color: '#999',
-    marginBottom: 16,
-  },
+  couponDiscount: { fontSize: 36, fontWeight: '800', color: '#FF6B35', marginBottom: 10 },
+  couponExpiry:   { fontSize: 13, color: '#999' },
+  codeSection: { width: '100%', alignItems: 'center', marginBottom: 32 },
+  codeLabel:  { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 4 },
+  codeLabel2: { fontSize: 13, color: '#999', marginBottom: 16 },
   codeBox: {
     backgroundColor: '#1A1A1A',
     borderRadius: 14,
     paddingVertical: 22,
     paddingHorizontal: 36,
+    minWidth: 200,
+    alignItems: 'center',
   },
   codeText: {
     fontSize: 34,
@@ -179,8 +201,6 @@ const styles = StyleSheet.create({
     letterSpacing: 8,
     fontVariant: ['tabular-nums'],
   },
-
-  // Redeem
   redeemButton: {
     width: '100%',
     height: 52,
@@ -190,13 +210,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  redeemButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-
-  // Success
+  redeemButtonDisabled: { opacity: 0.5 },
+  redeemButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   successBox: {
     width: '100%',
     backgroundColor: '#E6F4EA',
@@ -205,24 +220,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  successTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#2E7D32',
-    marginBottom: 6,
-  },
-  successSubtitle: {
-    fontSize: 14,
-    color: '#388E3C',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-
+  successTitle:    { fontSize: 17, fontWeight: '700', color: '#2E7D32', marginBottom: 6 },
+  successSubtitle: { fontSize: 14, color: '#388E3C', textAlign: 'center', lineHeight: 20 },
   disclaimer: {
-    fontSize: 12,
-    color: '#BBB',
-    textAlign: 'center',
-    lineHeight: 18,
-    paddingHorizontal: 12,
+    fontSize: 12, color: '#BBB', textAlign: 'center', lineHeight: 18, paddingHorizontal: 12,
   },
 });

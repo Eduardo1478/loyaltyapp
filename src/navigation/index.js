@@ -5,14 +5,13 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignupScreen from '../screens/auth/SignupScreen';
-import CustomerHome from '../screens/user/CustomerHome';
-import BusinessPage from '../screens/user/BusinessPage';
-import CouponDetail from '../screens/user/CouponDetail';
+import CustomerTabs from './CustomerTabs';
 import BusinessDashboard from '../screens/business/BusinessDashboard';
 import CreateBusinessProfile from '../screens/business/CreateBusinessProfile';
 import CreateCoupon from '../screens/business/CreateCoupon';
 import BusinessQR from '../screens/business/BusinessQR';
-import QRScanner from '../screens/user/QRScanner';
+import EditBusinessProfile from '../screens/business/EditBusinessProfile';
+import RedeemCoupon from '../screens/business/RedeemCoupon';
 
 const Stack = createNativeStackNavigator();
 
@@ -25,23 +24,14 @@ function AuthStack() {
   );
 }
 
-function CustomerStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="CustomerHome" component={CustomerHome} />
-      <Stack.Screen name="QRScanner" component={QRScanner} />
-      <Stack.Screen name="BusinessPage" component={BusinessPage} />
-      <Stack.Screen name="CouponDetail" component={CouponDetail} />
-    </Stack.Navigator>
-  );
-}
-
 function BusinessStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="BusinessDashboard" component={BusinessDashboard} />
       <Stack.Screen name="CreateCoupon" component={CreateCoupon} />
       <Stack.Screen name="BusinessQR" component={BusinessQR} />
+      <Stack.Screen name="EditBusinessProfile" component={EditBusinessProfile} />
+      <Stack.Screen name="RedeemCoupon" component={RedeemCoupon} />
     </Stack.Navigator>
   );
 }
@@ -70,7 +60,7 @@ export default function Navigation() {
   return (
     <NavigationContainer>
       {!user                                          && <AuthStack />}
-      {user && role === 'customer'                    && <CustomerStack />}
+      {user && role === 'customer'                    && <CustomerTabs />}
       {isBusinessOwner && hasBusinessProfile === true  && <BusinessStack />}
       {isBusinessOwner && hasBusinessProfile === false && <CreateBusinessProfileStack />}
     </NavigationContainer>
