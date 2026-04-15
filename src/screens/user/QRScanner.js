@@ -75,14 +75,7 @@ export default function QRScanner({ navigation }) {
       <SafeAreaView style={styles.overlay} pointerEvents="box-none">
         {/* Top bar */}
         <View style={styles.overlayTop}>
-          <TouchableOpacity
-            style={styles.overlayBack}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.overlayBackText}>← Cancelar</Text>
-          </TouchableOpacity>
           <Text style={styles.overlayTitle}>Escanear QR</Text>
-          <View style={styles.navSpacer} />
         </View>
 
         {/* Viewfinder cutout cue */}
@@ -173,25 +166,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   overlayTop: {
-    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 14,
     backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  overlayBack: { width: 90 },
-  overlayBackText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '500',
   },
   overlayTitle: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '700',
   },
-  navSpacer: { width: 90 },
 
   // Viewfinder
   viewfinderRow: {

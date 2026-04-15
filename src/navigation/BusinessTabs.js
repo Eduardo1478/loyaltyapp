@@ -80,14 +80,14 @@ export default function BusinessTabs() {
         options={{ tabBarLabel: 'Promos', tabBarIcon: icon('pricetag-outline') }}
       />
       <Tab.Screen
-        name="CanjearTab"
-        component={CanjearStack}
-        options={{ tabBarLabel: 'Canjear', tabBarIcon: icon('qr-code-outline') }}
-      />
-      <Tab.Screen
         name="DatosTab"
         component={DatosStack}
         options={{ tabBarLabel: 'Datos', tabBarIcon: icon('bar-chart-outline') }}
+      />
+      <Tab.Screen
+        name="CanjearTab"
+        component={CanjearStack}
+        options={{ tabBarLabel: 'Canjear', tabBarIcon: icon('qr-code-outline') }}
       />
       <Tab.Screen
         name="LivesTab"

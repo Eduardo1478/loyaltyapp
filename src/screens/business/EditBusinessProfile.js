@@ -68,6 +68,7 @@ export default function EditBusinessProfile({ route, navigation }) {
     name:            initialName,
     category:        initialCategory,
     description:     initialDescription,
+    location:        initialLocation,
     coverPhotoURL:   initialCover,
     profilePhotoURL: initialAvatar,
   } = route.params;
@@ -75,6 +76,7 @@ export default function EditBusinessProfile({ route, navigation }) {
   const [name, setName]               = useState(initialName ?? '');
   const [category, setCategory]       = useState(initialCategory ?? 'restaurante');
   const [description, setDescription] = useState(initialDescription ?? '');
+  const [location, setLocation]       = useState(initialLocation ?? '');
   const [coverURL, setCoverURL]       = useState(initialCover ?? null);
   const [avatarURL, setAvatarURL]     = useState(initialAvatar ?? null);
   const [uploading, setUploading]     = useState(null); // 'cover' | 'avatar'
@@ -119,6 +121,7 @@ export default function EditBusinessProfile({ route, navigation }) {
         name:            name.trim(),
         category,
         description:     description.trim(),
+        location:        location.trim(),
         coverPhotoURL:   coverURL,
         profilePhotoURL: avatarURL,
       });
@@ -235,6 +238,17 @@ export default function EditBusinessProfile({ route, navigation }) {
               );
             })}
           </View>
+
+          <Text style={styles.label}>Ubicación</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Ej. Av. Insurgentes 123, Col. Roma, CDMX"
+            placeholderTextColor="#999"
+            autoCapitalize="words"
+            returnKeyType="next"
+            value={location}
+            onChangeText={setLocation}
+          />
 
           <Text style={styles.label}>
             Descripción <Text style={styles.optional}>(opcional)</Text>

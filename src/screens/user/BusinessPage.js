@@ -24,6 +24,17 @@ import {
   serverTimestamp,
   increment,
 } from 'firebase/firestore';
+
+// Include stamp-tracking fields in the normalized coupon object
+function promoTypeFields(data) {
+  return {
+    type:           data.type ?? 'discount',
+    stampsRequired: data.stampsRequired ?? null,
+    visitNumber:    data.visitNumber    ?? null,
+    stampReward:    data.stampReward    ?? null,
+    visitReward:    data.visitReward    ?? null,
+  };
+}
 import { db } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
 
@@ -62,6 +73,7 @@ export default function BusinessPage({ route, navigation }) {
 
   const [business, setBusiness]           = useState(null);
   const [coupons, setCoupons]             = useState([]);
+  const [userProgress, setUserProgress]   = useState(null); // userProgress doc for this business
   const [isFollowing, setIsFollowing]     = useState(false);
   const [followDocId, setFollowDocId]     = useState(null);
   const [followLoading, setFollowLoading] = useState(false);
@@ -72,7 +84,7 @@ export default function BusinessPage({ route, navigation }) {
     setLoading(true);
     setError('');
     try {
-      const [bizSnap, couponsSnap, followsSnap] = await Promise.all([
+      const [bizSnap, couponsSnap, userFollowSnap, allFollowsSnap, progressSnap] = await Promise.all([
         getDoc(doc(db, 'businesses', businessId)),
         getDocs(query(collection(db, 'promos'), where('businessId', '==', businessId))),
         getDocs(query(
@@ -80,11 +92,15 @@ export default function BusinessPage({ route, navigation }) {
           where('userId', '==', user.uid),
           where('businessId', '==', businessId)
         )),
+        getDocs(query(collection(db, 'follows'), where('businessId', '==', businessId))),
+        getDoc(doc(db, 'businesses', businessId, 'userProgress', user.uid)),
       ]);
 
       if (!bizSnap.exists()) { setError('No se encontró este negocio.'); return; }
 
-      setBusiness({ id: bizSnap.id, ...bizSnap.data() });
+      // Use live follow count from the follows collection — more reliable than the cached field
+      setBusiness({ id: bizSnap.id, ...bizSnap.data(), followerCount: allFollowsSnap.size });
+      setUserProgress(progressSnap.exists() ? progressSnap.data() : null);
 
       const allCoupons = couponsSnap.docs.map((d) => {
         const data = d.data();
@@ -94,13 +110,14 @@ export default function BusinessPage({ route, navigation }) {
           title:      data.title,
           discount:   promoDisplayValue(data),
           expiresAt:  data.expiresAt ? data.expiresAt.toDate().toISOString() : null,
+          ...promoTypeFields(data),
         };
       });
       setCoupons(allCoupons.filter(isActiveCoupon));
 
-      if (!followsSnap.empty) {
+      if (!userFollowSnap.empty) {
         setIsFollowing(true);
-        setFollowDocId(followsSnap.docs[0].id);
+        setFollowDocId(userFollowSnap.docs[0].id);
       } else {
         setIsFollowing(false);
         setFollowDocId(null);
@@ -153,12 +170,40 @@ export default function BusinessPage({ route, navigation }) {
   }
 
   function renderCoupon({ item }) {
+    const isStamp    = item.type === 'stamp';
+    const isNthVisit = item.type === 'nth_visit';
+    const showProgress = isStamp || isNthVisit;
+
+    let currentStamps = 0;
+    let totalRequired = 1;
+
+    if (isStamp) {
+      currentStamps = userProgress?.stamps ?? 0;
+      totalRequired = item.stampsRequired ?? 10;
+    } else if (isNthVisit) {
+      currentStamps = userProgress?.totalVisits ?? 0;
+      totalRequired = item.visitNumber ?? 10;
+    }
+
+    const progressPct = Math.min((currentStamps / totalRequired) * 100, 100);
+
     return (
       <View style={styles.couponCard}>
         <View style={styles.couponInfo}>
           <Text style={styles.couponTitle}>{item.title}</Text>
           <Text style={styles.couponDiscount}>{item.discount}</Text>
           <Text style={styles.couponExpiry}>Vence: {formatExpiry(item.expiresAt)}</Text>
+
+          {showProgress && (
+            <View style={styles.stampProgressRow}>
+              <View style={styles.stampTrack}>
+                <View style={[styles.stampFill, { width: `${progressPct}%` }]} />
+              </View>
+              <Text style={styles.stampLabel}>
+                {currentStamps}/{totalRequired} {isStamp ? 'sellos' : 'visitas'}
+              </Text>
+            </View>
+          )}
         </View>
         <TouchableOpacity
           style={styles.couponButton}
@@ -207,6 +252,12 @@ export default function BusinessPage({ route, navigation }) {
         <View style={styles.infoBlock}>
           <Text style={styles.businessName}>{business?.name ?? '—'}</Text>
           <Text style={styles.businessCategory}>{business?.category ?? '—'}</Text>
+          {business?.location ? (
+            <View style={styles.locationRow}>
+              <Ionicons name="location-outline" size={13} color="#888" />
+              <Text style={styles.businessLocation}>{business.location}</Text>
+            </View>
+          ) : null}
           <Text style={styles.followerCount}>
             <Text style={styles.followerNumber}>{business?.followerCount ?? 0}</Text>
             {'  seguidores'}
@@ -364,7 +415,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0F0F0',
   },
   businessName:     { fontSize: 22, fontWeight: '800', color: '#1A1A1A', marginBottom: 4 },
-  businessCategory: { fontSize: 14, color: '#888', textTransform: 'capitalize', marginBottom: 8 },
+  businessCategory: { fontSize: 14, color: '#888', textTransform: 'capitalize', marginBottom: 4 },
+  locationRow:      { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 8 },
+  businessLocation: { fontSize: 13, color: '#888' },
   followerCount:    { fontSize: 14, color: '#888' },
   followerNumber:   { fontWeight: '700', color: '#1A1A1A', fontSize: 16 },
 
@@ -406,7 +459,16 @@ const styles = StyleSheet.create({
   couponInfo:    { flex: 1, marginRight: 12 },
   couponTitle:   { fontSize: 14, fontWeight: '600', color: '#1A1A1A', marginBottom: 2 },
   couponDiscount:{ fontSize: 18, fontWeight: '700', color: '#FF6B35', marginBottom: 4 },
-  couponExpiry:  { fontSize: 12, color: '#999' },
+  couponExpiry:  { fontSize: 12, color: '#999', marginBottom: 6 },
+
+  // Stamp progress on coupon card
+  stampProgressRow: { marginTop: 4 },
+  stampTrack: {
+    height: 5, backgroundColor: '#E0E0E0', borderRadius: 3,
+    overflow: 'hidden', marginBottom: 4,
+  },
+  stampFill: { height: '100%', backgroundColor: '#FF6B35', borderRadius: 3 },
+  stampLabel: { fontSize: 11, color: '#888', fontWeight: '500' },
   couponButton: {
     backgroundColor: '#FF6B35', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
   },

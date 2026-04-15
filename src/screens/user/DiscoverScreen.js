@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   View,
   Text,
+  Image,
   FlatList,
   TextInput,
   TouchableOpacity,
@@ -10,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 
 const CATEGORY_FILTERS = [
@@ -33,7 +34,18 @@ export default function DiscoverScreen({ navigation }) {
     setError('');
     try {
       const snap = await getDocs(collection(db, 'businesses'));
-      setAllBusinesses(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const bizList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+      // Fetch real follower counts from the follows collection in parallel
+      const followCounts = await Promise.all(
+        bizList.map((b) =>
+          getDocs(query(collection(db, 'follows'), where('businessId', '==', b.id)))
+        )
+      );
+
+      setAllBusinesses(
+        bizList.map((b, i) => ({ ...b, followerCount: followCounts[i].size }))
+      );
     } catch (e) {
       setError('No se pudieron cargar los negocios. Intenta de nuevo.');
     } finally {
@@ -55,12 +67,22 @@ export default function DiscoverScreen({ navigation }) {
   });
 
   function renderBusiness({ item }) {
+    const initial = item.name?.charAt(0)?.toUpperCase() ?? '?';
     return (
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.7}
         onPress={() => navigation.navigate('BusinessPage', { businessId: item.id })}
       >
+        {/* Avatar */}
+        <View style={styles.avatar}>
+          {item.profilePhotoURL
+            ? <Image source={{ uri: item.profilePhotoURL }} style={styles.avatarImage} />
+            : <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarInitial}>{initial}</Text>
+              </View>}
+        </View>
+
         <View style={styles.cardMain}>
           <Text style={styles.businessName}>{item.name}</Text>
           <Text style={styles.businessCategory} numberOfLines={1}>
@@ -217,6 +239,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     backgroundColor: '#FAFAFA',
   },
+  avatar: {
+    width: 44, height: 44, borderRadius: 22,
+    overflow: 'hidden', marginRight: 12,
+  },
+  avatarImage:      { width: '100%', height: '100%', resizeMode: 'cover' },
+  avatarPlaceholder:{ flex: 1, backgroundColor: '#FF6B35', justifyContent: 'center', alignItems: 'center' },
+  avatarInitial:    { fontSize: 18, fontWeight: '700', color: '#fff' },
+
   cardMain: { flex: 1, marginRight: 12 },
   businessName: { fontSize: 15, fontWeight: '600', color: '#1A1A1A', marginBottom: 3 },
   businessCategory: { fontSize: 13, color: '#888', textTransform: 'capitalize' },

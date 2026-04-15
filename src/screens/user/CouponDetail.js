@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,20 +8,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-  collection,
-  query,
-  where,
-  getDocs,
-} from 'firebase/firestore';
+import QRCode from 'react-native-qrcode-svg';
+import { doc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
 
-const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const CODE_TTL = 60; // seconds before QR refreshes
+const CHARS    = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
 function generateCode() {
   return Array.from({ length: 8 }, () => CHARS[Math.floor(Math.random() * CHARS.length)]).join('');
@@ -30,68 +23,93 @@ function generateCode() {
 function formatExpiry(isoString) {
   if (!isoString) return 'Sin vencimiento';
   return new Date(isoString).toLocaleDateString('es-MX', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
+    day: '2-digit', month: 'long', year: 'numeric',
   });
 }
 
 export default function CouponDetail({ route, navigation }) {
   const { coupon } = route.params;
-  const { user } = useAuth();
+  const { user }   = useAuth();
 
-  const [code, setCode]         = useState(null);   // loaded from or written to Firestore
+  const [code, setCode]           = useState(null);
   const [codeLoading, setCodeLoading] = useState(true);
-  const [redeemed, setRedeemed] = useState(false);
+  const [countdown, setCountdown] = useState(CODE_TTL);
 
-  // On mount: look for an existing unused redemption for this user+coupon.
-  // If found, reuse its code. If not, generate a new one and create the doc.
-  const initCode = useCallback(async () => {
-    try {
-      const existing = await getDocs(
-        query(
-          collection(db, 'redemptions'),
-          where('userId',   '==', user.uid),
-          where('couponId', '==', coupon.id),
-          where('redeemedAt', '==', null)
-        )
-      );
+  const intervalRef    = useRef(null);
+  const countdownRef   = useRef(CODE_TTL);
+  const refreshingRef  = useRef(false); // prevents double-refresh
 
-      if (!existing.empty) {
-        // Reuse the existing code (document ID is the code)
-        setCode(existing.docs[0].id);
-        return;
-      }
-
-      // Generate a new unique code and write to redemptions/{code}
-      const newCode = generateCode();
-      await setDoc(doc(db, 'redemptions', newCode), {
-        couponId:   coupon.id,
-        userId:     user.uid,
-        businessId: coupon.businessId ?? '',
-        createdAt:  serverTimestamp(),
-        redeemedAt: null,
-      });
-      setCode(newCode);
-    } catch (e) {
-      // Fallback: generate a local code so the screen doesn't break
-      setCode(generateCode());
-    } finally {
-      setCodeLoading(false);
-    }
-  }, [coupon.id, coupon.businessId, user.uid]);
-
-  useEffect(() => {
-    initCode();
-  }, [initCode]);
-
-  function handleRedeem() {
-    // UI-only flag — the actual redemption is confirmed from the business owner's RedeemCoupon screen
-    setRedeemed(true);
+  async function createNewCode() {
+    const newCode  = generateCode();
+    const expiresAt = Timestamp.fromDate(new Date(Date.now() + CODE_TTL * 1000));
+    await setDoc(doc(db, 'redemptions', newCode), {
+      couponId:   coupon.id,
+      userId:     user.uid,
+      businessId: coupon.businessId ?? '',
+      createdAt:  serverTimestamp(),
+      redeemedAt: null,
+      expiresAt,
+    });
+    return newCode;
   }
 
+  function startCountdown() {
+    clearInterval(intervalRef.current);
+    countdownRef.current = CODE_TTL;
+    setCountdown(CODE_TTL);
+    intervalRef.current = setInterval(() => {
+      countdownRef.current -= 1;
+      setCountdown(countdownRef.current);
+      if (countdownRef.current <= 0) {
+        clearInterval(intervalRef.current);
+        doRefresh();
+      }
+    }, 1000);
+  }
+
+  async function doRefresh() {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
+    try {
+      const newCode = await createNewCode();
+      setCode(newCode);
+      startCountdown();
+    } catch {
+      // If offline, retry after 3s
+      setTimeout(doRefresh, 3000);
+    } finally {
+      refreshingRef.current = false;
+    }
+  }
+
+  // ── Init ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const newCode = await createNewCode();
+        if (!mounted) return;
+        setCode(newCode);
+        startCountdown();
+      } catch {
+        if (!mounted) return;
+        setCode(generateCode()); // local fallback — won't be in Firestore
+      } finally {
+        if (mounted) setCodeLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+      clearInterval(intervalRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const progressPct = (countdown / CODE_TTL) * 100;
+  const urgent      = countdown <= 10;
+
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>← Atrás</Text>
@@ -100,48 +118,55 @@ export default function CouponDetail({ route, navigation }) {
         <View style={styles.navSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Coupon info card */}
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Coupon info */}
         <View style={styles.infoCard}>
           <Text style={styles.couponTitle}>{coupon.title}</Text>
           <Text style={styles.couponDiscount}>{coupon.discount}</Text>
           <Text style={styles.couponExpiry}>Vence: {formatExpiry(coupon.expiresAt)}</Text>
         </View>
 
-        {/* Redemption code block */}
-        <View style={styles.codeSection}>
-          <Text style={styles.codeLabel}>Código de canje</Text>
-          <Text style={styles.codeLabel2}>Muestra este código al cajero</Text>
-          <View style={styles.codeBox}>
-            {codeLoading ? (
-              <ActivityIndicator color="#fff" size="large" />
-            ) : (
-              <Text style={styles.codeText}>{code}</Text>
-            )}
+        {/* QR card */}
+        <View style={styles.qrCard}>
+          <Text style={styles.qrLabel}>Muestra al cajero para canjear</Text>
+
+          <View style={styles.qrBox}>
+            {codeLoading || !code
+              ? <ActivityIndicator color="#FF6B35" size="large" style={{ width: 200, height: 200 }} />
+              : <QRCode
+                  value={code}
+                  size={200}
+                  color="#1A1A1A"
+                  backgroundColor="#fff"
+                  ecl="M"
+                />}
           </View>
+
+          {/* Progress bar */}
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${progressPct}%` },
+                urgent && styles.progressFillUrgent,
+              ]}
+            />
+          </View>
+
+          {/* Countdown */}
+          <Text style={[styles.countdownText, urgent && styles.countdownUrgent]}>
+            {codeLoading
+              ? 'Generando código…'
+              : `Actualiza en 0:${String(countdown).padStart(2, '0')}`}
+          </Text>
         </View>
 
-        {/* Redeem button / success state */}
-        {redeemed ? (
-          <View style={styles.successBox}>
-            <Text style={styles.successTitle}>¡Cupón presentado!</Text>
-            <Text style={styles.successSubtitle}>
-              El cajero validará el código y aplicará el descuento.
-            </Text>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={[styles.redeemButton, codeLoading && styles.redeemButtonDisabled]}
-            onPress={handleRedeem}
-            disabled={codeLoading}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.redeemButtonText}>Presentar al cajero</Text>
-          </TouchableOpacity>
-        )}
-
         <Text style={styles.disclaimer}>
-          Este cupón es de un solo uso. Una vez canjeado no podrá utilizarse de nuevo.
+          Este código es de un solo uso y se actualiza cada 60 segundos.{'\n'}
+          No compartas capturas de pantalla.
         </Text>
       </ScrollView>
     </SafeAreaView>
@@ -151,78 +176,55 @@ export default function CouponDetail({ route, navigation }) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#fff' },
   navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: '#F0F0F0',
   },
-  backText: { fontSize: 15, color: '#FF6B35', fontWeight: '500', width: 72 },
-  navTitle: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
-  navSpacer: { width: 72 },
+  backText:   { fontSize: 15, color: '#FF6B35', fontWeight: '500', width: 72 },
+  navTitle:   { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
+  navSpacer:  { width: 72 },
+
   container: {
-    paddingHorizontal: 24,
-    paddingTop: 28,
-    paddingBottom: 48,
-    alignItems: 'center',
+    paddingHorizontal: 24, paddingTop: 28, paddingBottom: 48, alignItems: 'center',
   },
+
+  // Info card
   infoCard: {
-    width: '100%',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 14,
-    padding: 20,
-    alignItems: 'center',
-    backgroundColor: '#FAFAFA',
-    marginBottom: 32,
+    width: '100%', borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 14,
+    padding: 20, alignItems: 'center', backgroundColor: '#FAFAFA', marginBottom: 28,
   },
-  couponTitle: {
-    fontSize: 18, fontWeight: '600', color: '#1A1A1A', textAlign: 'center', marginBottom: 8,
-  },
+  couponTitle:    { fontSize: 18, fontWeight: '600', color: '#1A1A1A', textAlign: 'center', marginBottom: 8 },
   couponDiscount: { fontSize: 36, fontWeight: '800', color: '#FF6B35', marginBottom: 10 },
   couponExpiry:   { fontSize: 13, color: '#999' },
-  codeSection: { width: '100%', alignItems: 'center', marginBottom: 32 },
-  codeLabel:  { fontSize: 14, fontWeight: '600', color: '#555', marginBottom: 4 },
-  codeLabel2: { fontSize: 13, color: '#999', marginBottom: 16 },
-  codeBox: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 14,
-    paddingVertical: 22,
-    paddingHorizontal: 36,
-    minWidth: 200,
-    alignItems: 'center',
+
+  // QR card
+  qrCard: {
+    width: '100%', alignItems: 'center',
+    borderWidth: 1, borderColor: '#E0E0E0', borderRadius: 16,
+    paddingTop: 24, paddingBottom: 20, paddingHorizontal: 20,
+    backgroundColor: '#fff',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+    marginBottom: 24,
   },
-  codeText: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: 8,
-    fontVariant: ['tabular-nums'],
+  qrLabel: { fontSize: 13, color: '#888', marginBottom: 20, textAlign: 'center' },
+  qrBox:   { marginBottom: 20 },
+
+  // Progress bar
+  progressTrack: {
+    width: '100%', height: 4, backgroundColor: '#F0F0F0', borderRadius: 2,
+    overflow: 'hidden', marginBottom: 10,
   },
-  redeemButton: {
-    width: '100%',
-    height: 52,
-    backgroundColor: '#FF6B35',
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20,
+  progressFill: {
+    height: '100%', backgroundColor: '#FF6B35', borderRadius: 2,
   },
-  redeemButtonDisabled: { opacity: 0.5 },
-  redeemButtonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  successBox: {
-    width: '100%',
-    backgroundColor: '#E6F4EA',
-    borderRadius: 10,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  successTitle:    { fontSize: 17, fontWeight: '700', color: '#2E7D32', marginBottom: 6 },
-  successSubtitle: { fontSize: 14, color: '#388E3C', textAlign: 'center', lineHeight: 20 },
+  progressFillUrgent: { backgroundColor: '#D94F4F' },
+
+  // Countdown
+  countdownText:   { fontSize: 13, color: '#999', fontWeight: '500' },
+  countdownUrgent: { color: '#D94F4F', fontWeight: '700' },
+
   disclaimer: {
-    fontSize: 12, color: '#BBB', textAlign: 'center', lineHeight: 18, paddingHorizontal: 12,
+    fontSize: 12, color: '#BBB', textAlign: 'center', lineHeight: 18,
   },
 });

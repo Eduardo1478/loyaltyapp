@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function LivesScreen() {
@@ -8,7 +9,7 @@ export default function LivesScreen() {
         <Text style={styles.headerTitle}>Lives</Text>
       </View>
       <View style={styles.centered}>
-        <Text style={styles.icon}>📺</Text>
+        <Ionicons name="play-circle-outline" size={64} color="#FF6B35" style={{ marginBottom: 16 }} />
         <Text style={styles.title}>Lives</Text>
         <Text style={styles.subtitle}>
           Las transmisiones en vivo estarán disponibles próximamente.
@@ -37,7 +38,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 40,
   },
-  icon: { fontSize: 56, marginBottom: 16 },
   title: {
     fontSize: 22,
     fontWeight: '700',

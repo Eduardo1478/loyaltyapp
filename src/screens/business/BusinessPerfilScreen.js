@@ -136,6 +136,12 @@ export default function BusinessPerfilScreen({ navigation }) {
         <View style={styles.infoBlock}>
           <Text style={styles.businessName}>{business?.name ?? '—'}</Text>
           <Text style={styles.businessCategory}>{business?.category ?? '—'}</Text>
+          {business?.location ? (
+            <View style={styles.locationRow}>
+              <Ionicons name="location-outline" size={13} color="#888" />
+              <Text style={styles.businessLocation}>{business.location}</Text>
+            </View>
+          ) : null}
           <Text style={styles.followerCount}>
             <Text style={styles.followerNumber}>{followerCount}</Text>
             {'  seguidores'}
@@ -161,6 +167,7 @@ export default function BusinessPerfilScreen({ navigation }) {
                 name:            business.name,
                 category:        business.category,
                 description:     business.description ?? '',
+                location:        business.location ?? '',
                 coverPhotoURL:   business.coverPhotoURL ?? null,
                 profilePhotoURL: business.profilePhotoURL ?? null,
               })
@@ -273,7 +280,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0F0F0',
   },
   businessName:     { fontSize: 22, fontWeight: '800', color: '#1A1A1A', marginBottom: 4 },
-  businessCategory: { fontSize: 14, color: '#888', textTransform: 'capitalize', marginBottom: 10 },
+  businessCategory: { fontSize: 14, color: '#888', textTransform: 'capitalize', marginBottom: 4 },
+  locationRow:      { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 10 },
+  businessLocation: { fontSize: 13, color: '#888' },
   followerCount:    { fontSize: 14, color: '#888' },
   followerNumber:   { fontWeight: '700', color: '#1A1A1A', fontSize: 16 },
 
